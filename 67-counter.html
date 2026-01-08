@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>67 Counter - Compteur de Reps</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial Black', Arial, sans-serif;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 100vw;
+            max-height: 100vh;
+            aspect-ratio: 16/9;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #video {
+            display: none;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .title {
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 72px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 40px rgba(240, 147, 251, 0.5);
+            letter-spacing: 8px;
+        }
+
+        #repCounter {
+            font-size: 280px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 60px rgba(255, 255, 255, 0.8),
+                         0 0 100px rgba(240, 147, 251, 0.6);
+            opacity: 0;
+            transition: opacity 0.2s;
+            line-height: 1;
+        }
+
+        #repCounter.active {
+            animation: pulse 0.3s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+
+        #countdown {
+            font-size: 350px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 80px rgba(240, 147, 251, 0.8);
+            opacity: 0;
+            animation: countdownPulse 1s ease-in-out infinite;
+        }
+
+        @keyframes countdownPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        #timer {
+            position: absolute;
+            top: 40px;
+            right: 50px;
+            font-size: 64px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 30px rgba(255, 255, 255, 0.8);
+            background: linear-gradient(135deg, rgba(240, 147, 251, 0.3) 0%, rgba(245, 87, 108, 0.3) 100%);
+            padding: 20px 40px;
+            border-radius: 30px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(10px);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        #startButton {
+            position: absolute;
+            font-size: 48px;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border: none;
+            padding: 40px 80px;
+            border-radius: 100px;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: all 0.3s ease;
+            box-shadow: 0 20px 60px rgba(240, 147, 251, 0.6),
+                        0 0 0 0 rgba(240, 147, 251, 0.4);
+            z-index: 20;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            animation: buttonGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes buttonGlow {
+            0%, 100% { box-shadow: 0 20px 60px rgba(240, 147, 251, 0.6), 0 0 40px rgba(240, 147, 251, 0.4); }
+            50% { box-shadow: 0 20px 80px rgba(240, 147, 251, 0.8), 0 0 60px rgba(240, 147, 251, 0.6); }
+        }
+
+        #startButton:hover {
+            transform: scale(1.1);
+            box-shadow: 0 25px 80px rgba(240, 147, 251, 0.8),
+                        0 0 80px rgba(240, 147, 251, 0.6);
+        }
+
+        #startButton:active {
+            transform: scale(0.95);
+        }
+
+        #startButton.hidden {
+            display: none;
+        }
+
+        .final-score {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 80px 120px;
+            border-radius: 40px;
+            border: 4px solid rgba(240, 147, 251, 0.6);
+            backdrop-filter: blur(20px);
+        }
+
+        .final-score.show {
+            opacity: 1;
+            pointer-events: auto;
+            animation: fadeInScale 0.6s ease-out;
+        }
+
+        @keyframes fadeInScale {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.5);
+            }
+            100% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+
+        .final-score h1 {
+            font-size: 64px;
+            color: #fff;
+            text-shadow: 0 0 30px rgba(255, 255, 255, 0.8);
+            margin-bottom: 30px;
+            letter-spacing: 4px;
+        }
+
+        .final-score .score {
+            font-size: 220px;
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 60px rgba(255, 215, 0, 0.8);
+            margin-bottom: 40px;
+            line-height: 1;
+            animation: scoreShine 2s ease-in-out infinite;
+        }
+
+        @keyframes scoreShine {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.3); }
+        }
+
+        .final-score button {
+            font-size: 32px;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            border: none;
+            padding: 25px 60px;
+            border-radius: 100px;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: all 0.3s;
+            box-shadow: 0 15px 50px rgba(67, 233, 123, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .final-score button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 20px 60px rgba(67, 233, 123, 0.7);
+        }
+
+        #status {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 22px;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px 35px;
+            border-radius: 50px;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="video-container">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+
+            <div class="overlay">
+                <div class="title">6 7</div>
+                <div id="countdown"></div>
+                <div id="repCounter">0</div>
+                <div id="timer"></div>
+                <button id="startButton">START</button>
+
+                <div class="final-score" id="finalScore">
+                    <h1>SCORE FINAL</h1>
+                    <div class="score" id="finalScoreValue">0</div>
+                    <button id="restartButton">REJOUER</button>
+                </div>
+            </div>
+
+            <div id="status">Initialisation...</div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const repCounter = document.getElementById('repCounter');
+        const countdown = document.getElementById('countdown');
+        const timer = document.getElementById('timer');
+        const finalScore = document.getElementById('finalScore');
+        const finalScoreValue = document.getElementById('finalScoreValue');
+        const restartButton = document.getElementById('restartButton');
+        const status = document.getElementById('status');
+
+        let reps = 0;
+        let isRunning = false;
+        let timeLeft = 20;
+        let handPositions = { left: [], right: [] };
+        let currentDirection = { left: null, right: null };
+        let lastDetectedState = null;
+
+        // MediaPipe Hands setup
+        const hands = new Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
+        });
+
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        // Camera setup
+        navigator.mediaDevices.getUserMedia({
+            video: {
+                width: 1280,
+                height: 720,
+                facingMode: 'user'
+            }
+        })
+        .then(stream => {
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                status.textContent = 'Prêt! Cliquez sur START';
+                processVideo();
+            };
+        })
+        .catch(err => {
+            status.textContent = 'Erreur caméra: ' + err.message;
+        });
+
+        async function processVideo() {
+            await hands.send({ image: video });
+            requestAnimationFrame(processVideo);
+        }
+
+        function onResults(results) {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+            if (results.multiHandLandmarks && results.multiHandedness) {
+                // Update positions for both hands
+                for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+                    const landmarks = results.multiHandLandmarks[i];
+                    const handedness = results.multiHandedness[i].label; // "Left" or "Right"
+
+                    // Draw hand landmarks
+                    drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 3});
+                    drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 4});
+
+                    if (isRunning) {
+                        updateHandPosition(landmarks, handedness);
+                    }
+                }
+
+                // Check for alternating movement after updating both hands
+                if (isRunning) {
+                    detectAlternatingMovement();
+                }
+            }
+
+            ctx.restore();
+        }
+
+        function updateHandPosition(landmarks, handedness) {
+            // Use wrist position (landmark 0) for tracking vertical movement
+            const wrist = landmarks[0];
+            const wristY = wrist.y;
+
+            const hand = handedness.toLowerCase();
+            handPositions[hand].push(wristY);
+
+            // Keep only last 4 positions for faster detection
+            if (handPositions[hand].length > 4) {
+                handPositions[hand].shift();
+            }
+
+            // Need at least 3 positions to detect movement direction
+            if (handPositions[hand].length < 3) return;
+
+            const positions = handPositions[hand];
+            const len = positions.length;
+
+            // Compare last position with previous one
+            const current = positions[len - 1];
+            const previous = positions[len - 2];
+            const threshold = 0.015;
+
+            // Detect movement direction
+            if (previous - current > threshold) {
+                currentDirection[hand] = 'up'; // Moving up
+            } else if (current - previous > threshold) {
+                currentDirection[hand] = 'down'; // Moving down
+            }
+        }
+
+        function detectAlternatingMovement() {
+            // Need both hands detected
+            if (!currentDirection.left || !currentDirection.right) return;
+
+            // Create a state string representing current configuration
+            const state = `${currentDirection.left}-${currentDirection.right}`;
+
+            // Check if hands are in opposite directions
+            const isAlternating =
+                (currentDirection.left === 'up' && currentDirection.right === 'down') ||
+                (currentDirection.left === 'down' && currentDirection.right === 'up');
+
+            // If alternating and state changed, count a rep
+            if (isAlternating && state !== lastDetectedState) {
+                reps++;
+                repCounter.textContent = reps;
+                repCounter.style.opacity = '1';
+                repCounter.classList.remove('active');
+                void repCounter.offsetWidth; // Trigger reflow
+                repCounter.classList.add('active');
+                lastDetectedState = state;
+            }
+        }
+
+        function startCountdown() {
+            startButton.classList.add('hidden');
+            countdown.style.opacity = '1';
+            let count = 3;
+
+            countdown.textContent = count;
+
+            const countInterval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdown.textContent = count;
+                } else {
+                    clearInterval(countInterval);
+                    countdown.style.opacity = '0';
+                    startPerformance();
+                }
+            }, 1000);
+        }
+
+        function startPerformance() {
+            isRunning = true;
+            reps = 0;
+            timeLeft = 20;
+            handPositions = { left: [], right: [] };
+            currentDirection = { left: null, right: null };
+            lastDetectedState = null;
+
+            repCounter.textContent = '0';
+            repCounter.style.opacity = '1';
+            timer.textContent = timeLeft + 's';
+            timer.style.opacity = '1';
+            status.textContent = 'GO! Faites vos 67!';
+
+            const timerInterval = setInterval(() => {
+                timeLeft--;
+                timer.textContent = timeLeft + 's';
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    endPerformance();
+                }
+            }, 1000);
+        }
+
+        function endPerformance() {
+            isRunning = false;
+            timer.style.opacity = '0';
+            repCounter.style.opacity = '0';
+            finalScoreValue.textContent = reps;
+            finalScore.classList.add('show');
+            status.textContent = 'Terminé! Score: ' + reps;
+        }
+
+        function reset() {
+            finalScore.classList.remove('show');
+            repCounter.textContent = '0';
+            reps = 0;
+            startButton.classList.remove('hidden');
+            status.textContent = 'Prêt! Cliquez sur START';
+        }
+
+        startButton.addEventListener('click', startCountdown);
+        restartButton.addEventListener('click', reset);
+    </script>
+</body>
+</html>
